@@ -448,7 +448,7 @@ def highlight_pe_below_subsector(row):
 styled = (
     df[display_cols]
     .style
-    .applymap(color_score, subset=["Value Score"])
+    .map(color_score, subset=["Value Score"])
     .apply(lambda row: [highlight_pe_below_subsector(row) if col == "P/E" else "" for col in display_cols], axis=1)
     .format(
         {
