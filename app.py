@@ -179,7 +179,7 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("Sort order")
     sort_by_options = [
-        "Value Score", "DCF Value", "DCF Premium (%)", "P/E", "Subsector Avg P/E", "P/B", "PEG",
+        "Value Score", "DCF Value", "DCF Premium (%)", "P/E", "Subsector Avg P/E", "P/B", "Subsector Avg P/B", "PEG",
         "EV/EBITDA", "FCF Yield (%)", "Rev Growth (%)", "EPS Growth (%)", "Market Cap ($B)"
     ]
     sort_by = st.selectbox("Order companies by", sort_by_options, index=0)
@@ -348,14 +348,16 @@ if sector_filter != "All":
 
 df = df[df["Market Cap ($B)"].fillna(0) >= min_mktcap_b]
 
-# Calculate subsector average P/E
+# Calculate subsector averages
 df["Subsector Avg P/E"] = df.groupby("Subsector")["P/E"].transform("mean").round(1)
+df["Subsector Avg P/B"] = df.groupby("Subsector")["P/B"].transform("mean").round(2)
 
 sort_ascending = {
     "Value Score": True,
     "P/E": True,
     "Subsector Avg P/E": True,
     "P/B": True,
+    "Subsector Avg P/B": True,
     "PEG": True,
     "EV/EBITDA": True,
     "FCF Yield (%)": False,
@@ -423,7 +425,7 @@ st.subheader("Full Valuation Rankings")
 display_cols = [
     "F500 Rank", "Ticker", "Company", "Subsector",
     "Price", "Market Cap ($B)", "Value Score",
-    "P/E", "Subsector Avg P/E", "Fwd P/E", "P/B", "PEG", "EV/EBITDA", "FCF Yield (%)",
+    "P/E", "Subsector Avg P/E", "Fwd P/E", "P/B", "Subsector Avg P/B", "PEG", "EV/EBITDA", "FCF Yield (%)",
     "DCF Value", "DCF Premium (%)",
     "Rev Growth (%)", "EPS Growth (%)", "Gross Margin (%)", "% from 52W High",
     "Div Yield (%)", "Beta",
@@ -439,17 +441,29 @@ def color_score(val):
         return "background-color: #fff3cd; color: #856404"   # yellow
     return "background-color: #f8d7da; color: #721c24"       # red
 
-def highlight_pe_below_subsector(row):
-    """Highlight P/E if it's below subsector average."""
-    if pd.notna(row.get("P/E")) and pd.notna(row.get("Subsector Avg P/E")) and row["P/E"] < row["Subsector Avg P/E"]:
+def highlight_below_subsector_avg(row, col, avg_col):
+    """Return a CSS style if `col` is below the subsector average in `avg_col`."""
+    if pd.notna(row.get(col)) and pd.notna(row.get(avg_col)) and row[col] < row[avg_col]:
         return "background-color: #d1ecf1; color: #0c5460"   # light blue
     return ""
+
+def highlight_row_vs_subsector(row):
+    """Build a per-column style list highlighting P/E and P/B vs. their subsector averages."""
+    out = []
+    for col in display_cols:
+        if col == "P/E":
+            out.append(highlight_below_subsector_avg(row, "P/E", "Subsector Avg P/E"))
+        elif col == "P/B":
+            out.append(highlight_below_subsector_avg(row, "P/B", "Subsector Avg P/B"))
+        else:
+            out.append("")
+    return out
 
 styled = (
     df[display_cols]
     .style
     .map(color_score, subset=["Value Score"])
-    .apply(lambda row: [highlight_pe_below_subsector(row) if col == "P/E" else "" for col in display_cols], axis=1)
+    .apply(highlight_row_vs_subsector, axis=1)
     .format(
         {
             "Price": "${:.2f}",
@@ -459,6 +473,7 @@ styled = (
             "Subsector Avg P/E": "{:.1f}",
             "Fwd P/E": "{:.1f}",
             "P/B": "{:.2f}",
+            "Subsector Avg P/B": "{:.2f}",
             "PEG": "{:.2f}",
             "EV/EBITDA": "{:.1f}",
             "FCF Yield (%)": "{:.1f}%",
