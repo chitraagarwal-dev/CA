@@ -179,8 +179,10 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("Sort order")
     sort_by_options = [
-        "Value Score", "DCF Value", "DCF Premium (%)", "P/E", "Subsector Avg P/E", "P/B", "Subsector Avg P/B", "PEG",
-        "EV/EBITDA", "FCF Yield (%)", "Rev Growth (%)", "EPS Growth (%)", "Market Cap ($B)"
+        "Value Score", "DCF Value", "DCF Premium (%)", "P/E", "Subsector Avg P/E", "P/B", "Subsector Avg P/B",
+        "ROE (%)", "P/B ÷ ROE", "PEG",
+        "EV/EBITDA", "Subsector Avg EV/EBITDA", "FCF Yield (%)", "Rev Growth (%)", "EPS Growth (%)", "Market Cap ($B)",
+        "Analyst Score"
     ]
     sort_by = st.selectbox("Order companies by", sort_by_options, index=0)
 
@@ -204,6 +206,26 @@ def load_financials(tickers: list[str]) -> pd.DataFrame:
             meta = FORTUNE500_TECH.get(ticker, (ticker, "Other", None))
 
             shares = info.get("sharesOutstanding")
+
+            # ROE comes as a decimal (e.g. 0.27 → 27.0%)
+            roe_raw = info.get("returnOnEquity")
+            roe_pct = round(roe_raw * 100, 1) if roe_raw is not None else None
+
+            # P/B ÷ ROE: "price paid per $1 of annual return on equity" (lower = better).
+            # Uses ROE in decimal form so the ratio is in the same units as P/B itself.
+            pb_val = info.get("priceToBook")
+            pb_over_roe = round(pb_val / roe_raw, 2) if pb_val and roe_raw and roe_raw > 0 else None
+
+            # Analyst recommendations (yfinance fields)
+            rec_key  = info.get("recommendationKey")        # "strong_buy" | "buy" | "hold" | "sell" | "strong_sell" | "none"
+            rec_mean = info.get("recommendationMean")       # 1.0 (strong buy) → 5.0 (strong sell)
+            rec_n    = info.get("numberOfAnalystOpinions")
+            rec_label = (
+                rec_key.replace("_", " ").title()
+                if isinstance(rec_key, str) and rec_key not in (None, "", "none")
+                else None
+            )
+
             rows.append({
                 "Ticker":          ticker,
                 "Company":         info.get("shortName") or meta[0],
@@ -214,6 +236,8 @@ def load_financials(tickers: list[str]) -> pd.DataFrame:
                 "P/E":             info.get("trailingPE"),
                 "Fwd P/E":         info.get("forwardPE"),
                 "P/B":             info.get("priceToBook"),
+                "ROE (%)":         roe_pct,
+                "P/B ÷ ROE":       pb_over_roe,
                 "PEG":             info.get("pegRatio"),
                 "EV/EBITDA":       round(ev / ebitda, 2) if ev and ebitda and ebitda > 0 else None,
                 "FCF Yield (%)":   round(fcf / mktcap * 100, 2) if fcf and mktcap else None,
@@ -227,6 +251,9 @@ def load_financials(tickers: list[str]) -> pd.DataFrame:
                 "52W High":        info.get("fiftyTwoWeekHigh"),
                 "52W Low":         info.get("fiftyTwoWeekLow"),
                 "Revenue ($B)":    round(info.get("totalRevenue", 0) / 1e9, 2) if info.get("totalRevenue") else None,
+                "Analyst Rating":  rec_label,
+                "Analyst Score":   round(rec_mean, 2) if rec_mean is not None else None,
+                "Analyst Count":   rec_n,
             })
         except Exception as exc:
             rows.append({
@@ -351,6 +378,7 @@ df = df[df["Market Cap ($B)"].fillna(0) >= min_mktcap_b]
 # Calculate subsector averages
 df["Subsector Avg P/E"] = df.groupby("Subsector")["P/E"].transform("mean").round(1)
 df["Subsector Avg P/B"] = df.groupby("Subsector")["P/B"].transform("mean").round(2)
+df["Subsector Avg EV/EBITDA"] = df.groupby("Subsector")["EV/EBITDA"].transform("mean").round(1)
 
 sort_ascending = {
     "Value Score": True,
@@ -358,12 +386,16 @@ sort_ascending = {
     "Subsector Avg P/E": True,
     "P/B": True,
     "Subsector Avg P/B": True,
+    "ROE (%)": False,         # higher ROE = better, so descending
+    "P/B ÷ ROE": True,        # lower = cheaper per unit of return
     "PEG": True,
     "EV/EBITDA": True,
+    "Subsector Avg EV/EBITDA": True,
     "FCF Yield (%)": False,
     "Rev Growth (%)": False,
     "EPS Growth (%)": False,
     "Market Cap ($B)": False,
+    "Analyst Score": True,    # 1 = strong buy → ascending puts strongest buys first
 }
 
 if sort_by in df.columns:
@@ -425,10 +457,13 @@ st.subheader("Full Valuation Rankings")
 display_cols = [
     "F500 Rank", "Ticker", "Company", "Subsector",
     "Price", "Market Cap ($B)", "Value Score",
-    "P/E", "Subsector Avg P/E", "Fwd P/E", "P/B", "Subsector Avg P/B", "PEG", "EV/EBITDA", "FCF Yield (%)",
+    "P/E", "Subsector Avg P/E", "Fwd P/E", "P/B", "Subsector Avg P/B",
+    "ROE (%)", "P/B ÷ ROE",
+    "PEG", "EV/EBITDA", "Subsector Avg EV/EBITDA", "FCF Yield (%)",
     "DCF Value", "DCF Premium (%)",
     "Rev Growth (%)", "EPS Growth (%)", "Gross Margin (%)", "% from 52W High",
     "Div Yield (%)", "Beta",
+    "Analyst Rating", "Analyst Score", "Analyst Count",
 ]
 display_cols = [c for c in display_cols if c in df.columns]
 
@@ -447,14 +482,42 @@ def highlight_below_subsector_avg(row, col, avg_col):
         return "background-color: #d1ecf1; color: #0c5460"   # light blue
     return ""
 
+def color_analyst_rating(val):
+    """Color analyst rating string: greens for buy, red for sell."""
+    if not isinstance(val, str):
+        return ""
+    v = val.lower()
+    if "strong buy" in v:
+        return "background-color: #c3e6cb; color: #155724; font-weight: 600"  # darker green
+    if v == "buy":
+        return "background-color: #d4edda; color: #155724"                    # green
+    if v == "hold":
+        return "background-color: #fff3cd; color: #856404"                    # yellow
+    if v == "sell":
+        return "background-color: #f8d7da; color: #721c24"                    # red
+    if "strong sell" in v:
+        return "background-color: #f5c6cb; color: #721c24; font-weight: 600"  # darker red
+    return ""
+
+
 def highlight_row_vs_subsector(row):
-    """Build a per-column style list highlighting P/E and P/B vs. their subsector averages."""
+    """Build a per-column style list highlighting valuation cells when they look favorable."""
     out = []
     for col in display_cols:
         if col == "P/E":
             out.append(highlight_below_subsector_avg(row, "P/E", "Subsector Avg P/E"))
         elif col == "P/B":
             out.append(highlight_below_subsector_avg(row, "P/B", "Subsector Avg P/B"))
+        elif col == "EV/EBITDA":
+            out.append(highlight_below_subsector_avg(row, "EV/EBITDA", "Subsector Avg EV/EBITDA"))
+        elif col == "ROE (%)":
+            # Highlight ROE > 20% as a strength signal
+            val = row.get("ROE (%)")
+            out.append("background-color: #d4edda; color: #155724" if pd.notna(val) and val >= 20 else "")
+        elif col == "P/B ÷ ROE":
+            # Lower P/B÷ROE = better "price per unit of return on equity"
+            val = row.get("P/B ÷ ROE")
+            out.append("background-color: #d4edda; color: #155724" if pd.notna(val) and 0 < val < 15 else "")
         else:
             out.append("")
     return out
@@ -463,6 +526,7 @@ styled = (
     df[display_cols]
     .style
     .map(color_score, subset=["Value Score"])
+    .map(color_analyst_rating, subset=[c for c in ["Analyst Rating"] if c in display_cols])
     .apply(highlight_row_vs_subsector, axis=1)
     .format(
         {
@@ -474,8 +538,13 @@ styled = (
             "Fwd P/E": "{:.1f}",
             "P/B": "{:.2f}",
             "Subsector Avg P/B": "{:.2f}",
+            "ROE (%)": "{:.1f}%",
+            "P/B ÷ ROE": "{:.1f}",
+            "Analyst Score": "{:.2f}",
+            "Analyst Count": "{:.0f}",
             "PEG": "{:.2f}",
             "EV/EBITDA": "{:.1f}",
+            "Subsector Avg EV/EBITDA": "{:.1f}",
             "FCF Yield (%)": "{:.1f}%",
             "DCF Value": "${:.2f}",
             "DCF Premium (%)": "{:.1f}%",
