@@ -6,6 +6,13 @@ import plotly.express as px
 import plotly.graph_objects as go
 from typing import Optional
 
+# Anthropic SDK is optional: only required if the user runs the Company Analysis section.
+try:
+    from anthropic import Anthropic
+    _ANTHROPIC_AVAILABLE = True
+except ImportError:
+    _ANTHROPIC_AVAILABLE = False
+
 st.set_page_config(
     page_title="Fortune 500 Dashboard",
     page_icon="📊",
@@ -624,6 +631,200 @@ if selected:
             st.plotly_chart(fig_vol, use_container_width=True)
     else:
         st.warning("No historical price data available.")
+
+# ── Company Analysis (LLM-driven equity research) ──────────────────────────────
+st.markdown("---")
+st.subheader("Company Analysis")
+st.caption(
+    "Enter a ticker to generate an independent buy-side DCF analysis using Claude. "
+    "Live price is passed to the model for the upside/downside comparison only — "
+    "the valuation itself is intended to be derived from cash-flow assumptions, not anchored to price."
+)
+
+COMPANY_ANALYSIS_PROMPT_TEMPLATE = """Assume you are a buy-side equity research analyst (but do not use insider shorthand). Create a detailed DCF model for {company_name} ({ticker}) that is critical and rational. Do not go by company speak or what other analysts are doing. Do not look at other people's estimates to inform your valuation. Watch out for the tendency to generate DCF estimates that drift toward the current stock price. I want an independent DCF estimate solely derived from a realistic assessment of cash flows. Keep the depth and precision of the analysis intact, but write it in straightforward, professional English rather than insider shorthand or compressed jargon. Think "smart memo to an investment committee" instead of "analyst desk notes." Be aware that most sell-side analysts develop aggressive estimates and then put forward convenient narratives that are actually false — analyze every claim rigorously, but be a truth seeker. Do not dial down the valuation to match the stock price; sometimes stocks really are discounted. You can run scenarios and give me ranges. Your basic objective is valuation and to justify the assumptions. Do not give verbose company background unless it is tied to a valuation assumption.
+
+REFERENCE DATA (provided by the dashboard, use only where useful):
+- Ticker: {ticker}
+- Company name (as reported): {company_name}
+- Current market price (USD): {price}
+- Market cap ($B): {market_cap_b}
+- Trailing P/E: {pe}
+- Forward P/E: {fwd_pe}
+- Revenue TTM ($B): {revenue_b}
+- Free cash flow TTM ($B): {fcf_b}
+- Revenue growth (yoy %): {rev_growth}
+- EPS growth (yoy %): {eps_growth}
+- Gross margin: {gross_margin}
+- ROE: {roe}
+- Beta: {beta}
+- Sell-side analyst consensus: {analyst_rating} (mean score {analyst_score}, n={analyst_n}) — note this is provided only for context; do not anchor to it.
+
+Carry out the following work:
+
+(1) Comprehensive business and market analysis: examine the company's annual reports and investor presentations to understand business segments, product lines, pricing power, and market positioning. Research main competitors to analyze market share, competitive strategies, and industry trends.
+
+(2) Analyze the customer base, operational assets, and strategic initiatives. Investigate the track record for innovation, acquisition history, and capital allocation (buybacks, dividends, debt management), critically assessing the timing and effectiveness of each action.
+
+(3) Gather and structure the last five years of financial statements (Income Statement, Balance Sheet, Cash Flow Statement). Identify any critical accounting rules or assumptions that materially affect the reported financials.
+
+(4) Calculate and analyze key financial ratios and performance indicators over a five-year historical period: ROIC, ROE, leverage ratios, profitability margins, and operational KPIs such as volume/pricing growth, recurring revenue metrics, and customer churn.
+
+(5) Risk assessment: review the 'Risk Factors' section of regulatory filings and address any significant regulatory, legal, product liability, or environmental issues.
+
+(6) Develop detailed financial projections for the next 5–10 years. Build segment-specific revenue forecasts with explicit assumptions for volume and pricing. Project operating expenses, capex, and changes in net working capital based on historical trends and strategic plans.
+
+(7) Calculate WACC by determining an appropriate risk-free rate, equity risk premium, company beta, and cost of debt. Estimate a justifiable terminal growth rate based on long-term industry and economic outlooks.
+
+(8) Synthesize the projections and discount rate to calculate intrinsic value per share. Then — and only then — compare this value to the current market price (shown above) to determine potential upside or downside. Conclude with a sensitivity analysis showing how the valuation changes with variations in WACC, terminal growth, and revenue forecasts.
+
+(9) Provide a Worst Case / Base Case / Upside Case intrinsic value per share, and compare each against the current price shown above. Be explicit: "Base case = $X, current price = ${price}, implied upside/downside = ±Y%."
+
+Formatting: use Markdown headings (##) for each numbered section. Use tables for the historical financial summary, projections, WACC build, sensitivity grid, and scenario summary. Keep prose tight; cut anything not tied to a valuation assumption."""
+
+
+def _fmt(val, suffix="", fmt="{:.2f}"):
+    """Format a number for the prompt, or 'N/A' if missing."""
+    if val is None or (isinstance(val, float) and np.isnan(val)):
+        return "N/A"
+    try:
+        return fmt.format(val) + suffix
+    except (ValueError, TypeError):
+        return str(val)
+
+
+def build_analysis_prompt(ticker: str, financials: dict) -> str:
+    """Fill the template with whatever financial context we have for this ticker."""
+    return COMPANY_ANALYSIS_PROMPT_TEMPLATE.format(
+        ticker=ticker,
+        company_name=financials.get("company_name") or ticker,
+        price=_fmt(financials.get("price"), fmt="${:.2f}"),
+        market_cap_b=_fmt(financials.get("market_cap_b"), suffix="B", fmt="${:.1f}"),
+        pe=_fmt(financials.get("pe"), fmt="{:.1f}"),
+        fwd_pe=_fmt(financials.get("fwd_pe"), fmt="{:.1f}"),
+        revenue_b=_fmt(financials.get("revenue_b"), suffix="B", fmt="${:.1f}"),
+        fcf_b=_fmt(financials.get("fcf_b"), suffix="B", fmt="${:.1f}"),
+        rev_growth=_fmt(financials.get("rev_growth"), suffix="%", fmt="{:.1f}"),
+        eps_growth=_fmt(financials.get("eps_growth"), suffix="%", fmt="{:.1f}"),
+        gross_margin=_fmt(financials.get("gross_margin"), suffix="%", fmt="{:.1f}"),
+        roe=_fmt(financials.get("roe"), suffix="%", fmt="{:.1f}"),
+        beta=_fmt(financials.get("beta"), fmt="{:.2f}"),
+        analyst_rating=financials.get("analyst_rating") or "N/A",
+        analyst_score=_fmt(financials.get("analyst_score"), fmt="{:.2f}"),
+        analyst_n=_fmt(financials.get("analyst_n"), fmt="{:.0f}"),
+    )
+
+
+def extract_financials_for_prompt(ticker: str, df_universe: pd.DataFrame) -> dict:
+    """Pull what we already have from the dashboard's df; fall back to a fresh yfinance call if not in universe."""
+    row = df_universe[df_universe["Ticker"] == ticker]
+    if not row.empty:
+        r = row.iloc[0]
+        return {
+            "company_name":   r.get("Company"),
+            "price":          r.get("Price"),
+            "market_cap_b":   r.get("Market Cap ($B)"),
+            "pe":             r.get("P/E"),
+            "fwd_pe":         r.get("Fwd P/E"),
+            "revenue_b":      r.get("Revenue ($B)"),
+            "fcf_b":          r.get("Free Cash Flow ($B)"),
+            "rev_growth":     r.get("Rev Growth (%)"),
+            "eps_growth":     r.get("EPS Growth (%)"),
+            "gross_margin":   r.get("Gross Margin (%)"),
+            "roe":            r.get("ROE (%)"),
+            "beta":           r.get("Beta"),
+            "analyst_rating": r.get("Analyst Rating"),
+            "analyst_score":  r.get("Analyst Score"),
+            "analyst_n":      r.get("Analyst Count"),
+        }
+    # Not in the loaded universe — do a one-off yfinance fetch.
+    try:
+        info = yf.Ticker(ticker).info
+        return {
+            "company_name":   info.get("shortName") or info.get("longName") or ticker,
+            "price":          info.get("regularMarketPrice") or info.get("previousClose"),
+            "market_cap_b":   (info.get("marketCap") or 0) / 1e9 if info.get("marketCap") else None,
+            "pe":             info.get("trailingPE"),
+            "fwd_pe":         info.get("forwardPE"),
+            "revenue_b":      (info.get("totalRevenue") or 0) / 1e9 if info.get("totalRevenue") else None,
+            "fcf_b":          (info.get("freeCashflow") or 0) / 1e9 if info.get("freeCashflow") else None,
+            "rev_growth":     (info.get("revenueGrowth") or 0) * 100 if info.get("revenueGrowth") is not None else None,
+            "eps_growth":     (info.get("earningsGrowth") or 0) * 100 if info.get("earningsGrowth") is not None else None,
+            "gross_margin":   (info.get("grossMargins") or 0) * 100 if info.get("grossMargins") is not None else None,
+            "roe":            (info.get("returnOnEquity") or 0) * 100 if info.get("returnOnEquity") is not None else None,
+            "beta":           info.get("beta"),
+            "analyst_rating": (info.get("recommendationKey") or "").replace("_", " ").title() or None,
+            "analyst_score":  info.get("recommendationMean"),
+            "analyst_n":      info.get("numberOfAnalystOpinions"),
+        }
+    except Exception as exc:
+        return {"company_name": ticker}
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def run_company_analysis(ticker: str, prompt: str, model: str = "claude-sonnet-4-6") -> str:
+    """Cached so the same (ticker, prompt) doesn't re-bill within an hour."""
+    api_key = st.secrets.get("ANTHROPIC_API_KEY") if hasattr(st, "secrets") else None
+    if not api_key:
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY is not configured. In Streamlit Cloud, open Manage app → Settings → Secrets "
+            "and add a line: ANTHROPIC_API_KEY = \"sk-ant-...\""
+        )
+    client = Anthropic(api_key=api_key)
+    msg = client.messages.create(
+        model=model,
+        max_tokens=8192,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    # Concatenate all text blocks from the response.
+    return "".join(
+        block.text for block in msg.content if getattr(block, "type", None) == "text"
+    )
+
+
+with st.form("company_analysis_form"):
+    col_a, col_b = st.columns([3, 1])
+    with col_a:
+        analysis_ticker = st.text_input(
+            "Ticker",
+            placeholder="e.g. HPE, AAPL, MSFT",
+            help="Type a ticker to run an independent buy-side DCF analysis.",
+        )
+    with col_b:
+        analysis_model = st.selectbox(
+            "Model",
+            ["claude-sonnet-4-6", "claude-opus-4-6"],
+            index=0,
+            help="Sonnet is faster and cheaper; Opus is higher quality for deep reasoning.",
+        )
+    run_analysis = st.form_submit_button("Run analysis", use_container_width=True)
+
+if run_analysis and analysis_ticker:
+    ticker_clean = analysis_ticker.strip().upper()
+    if not _ANTHROPIC_AVAILABLE:
+        st.error(
+            "The `anthropic` package isn't installed. Add `anthropic>=0.40.0` to "
+            "your `requirements.txt` and redeploy."
+        )
+    else:
+        financials = extract_financials_for_prompt(ticker_clean, df)
+        prompt = build_analysis_prompt(ticker_clean, financials)
+        with st.expander("Prompt sent to Claude", expanded=False):
+            st.code(prompt, language="markdown")
+        try:
+            with st.spinner(f"Generating buy-side analysis for {ticker_clean} ({analysis_model})…"):
+                analysis_text = run_company_analysis(ticker_clean, prompt, model=analysis_model)
+            st.markdown(analysis_text)
+
+            # Live upside/downside vs current price, computed by the app (not the LLM).
+            price_now = financials.get("price")
+            if price_now is not None:
+                st.info(
+                    f"Live reference price for **{ticker_clean}** at run time: **${price_now:.2f}**. "
+                    "The intrinsic values above were produced independently — compare them yourself."
+                )
+        except Exception as exc:
+            st.error(f"Analysis failed: {exc}")
+
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown("---")
