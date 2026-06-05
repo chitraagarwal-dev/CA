@@ -761,7 +761,7 @@ def extract_financials_for_prompt(ticker: str, df_universe: pd.DataFrame) -> dic
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def run_company_analysis(ticker: str, prompt: str, model: str = "claude-sonnet-4-6") -> str:
+def run_company_analysis(ticker: str, prompt: str, model: str = "claude-sonnet-4-6", max_tokens: int = 8192) -> str:
     """Cached so the same (ticker, prompt) doesn't re-bill within an hour."""
     api_key = st.secrets.get("ANTHROPIC_API_KEY") if hasattr(st, "secrets") else None
     if not api_key:
@@ -772,7 +772,7 @@ def run_company_analysis(ticker: str, prompt: str, model: str = "claude-sonnet-4
     client = Anthropic(api_key=api_key)
     msg = client.messages.create(
         model=model,
-        max_tokens=8192,
+        max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
     )
     # Concatenate all text blocks from the response.
@@ -824,6 +824,253 @@ if run_analysis and analysis_ticker:
                 )
         except Exception as exc:
             st.error(f"Analysis failed: {exc}")
+
+
+# ── Company Background (LLM-driven 25-page memo) ───────────────────────────────
+st.markdown("---")
+st.subheader("Company Background")
+st.caption(
+    "Enter a ticker to generate a detailed buy-side information memorandum (~25 pages) using Claude. "
+    "Covers business overview, segments, competitors, customers, financials, hidden liabilities, and a basic DCF. "
+    "Generation takes 1–3 minutes due to the length of the output."
+)
+
+COMPANY_BACKGROUND_PROMPT_TEMPLATE = """Assume you are a buy-side equity research analyst. Create a detailed 25-page information memorandum on {company_name} ({ticker}) that includes substantial factual data while maintaining concise language. Present findings in separate categories with bullet-point format where appropriate. Use neutral language based on facts only. Present financial ratios and operational metrics in properly formatted Markdown tables. Use the latest data available and cite sources where you can (e.g. "Source: FY24 10-K, p.32" or "Source: Q2-25 earnings release").
+
+REFERENCE DATA (provided by the dashboard, use only where useful):
+- Ticker: {ticker}
+- Company name (as reported): {company_name}
+- Current market price (USD): {price}
+- Market cap ($B): {market_cap_b}
+- Trailing P/E: {pe}
+- Forward P/E: {fwd_pe}
+- Revenue TTM ($B): {revenue_b}
+- Free cash flow TTM ($B): {fcf_b}
+- Revenue growth (yoy %): {rev_growth}
+- EPS growth (yoy %): {eps_growth}
+- Gross margin: {gross_margin}
+- ROE: {roe}
+- Beta: {beta}
+- Sell-side analyst consensus: {analyst_rating} (mean score {analyst_score}, n={analyst_n}) — for context only.
+
+REQUIRED CONTENT SECTIONS (use ## Markdown headings, numbered exactly as below):
+
+## 1. Business Overview
+Provide a concise summary of the company's core business.
+
+## 2. Business History
+Include key milestones and significant events in the company's development.
+
+## 3. Business Segments
+Detail all major business divisions and their contributions to overall operations. Use a table for segment revenue and operating margins where data is available.
+
+## 4. Key Products
+- Catalog major products and their pricing structure.
+- Analyze pricing power and trends.
+- Include detailed pricing data across various products and services.
+- Customer churn rate where disclosed.
+
+## 5. End Markets and Industry Trends
+- Evaluate growth or decline rates across different end markets.
+- Identify geographical and segment-specific performance variations.
+- Provide quantitative data on market trajectories.
+
+## 6. Supply-Demand Dynamics
+- Analyze supply-demand balance and impacts on pricing.
+- Identify potential product substitutes.
+- Document current and projected pricing trends.
+
+## 7. Competitive Landscape
+- List main competitors with 4–5 line descriptions of each.
+- Document key competitor strategies, initiatives, and market share.
+- Analyze industry consolidation activities.
+- Track market share changes over recent years.
+- Identify any bankruptcies within the industry.
+- Document new market entrants.
+- Compare products against industry alternatives.
+
+## 8. Product Benchmarking
+Compare products against competitors' offerings using a table. Include cost, performance, features, and other relevant metrics.
+
+## 9. Business Model
+Explain the company's revenue generation and operational structure.
+
+## 10. Customer Analysis
+- Identify main customers and their size.
+- Detail key customer value propositions.
+- Include customer feedback (both favorable and unfavorable).
+- Analyze customer perception regarding brand appeal, trust, cost, performance, reliability, usability, and service.
+- Document customer economics, usage frequency, contract terms, and churn rates.
+
+## 11. Geographic and Segment Revenue Distribution
+Present revenue breakdown by geography and business segment in a table.
+
+## 12. Organizational Capabilities
+- Assess employee talent, technology assets, manufacturing facilities.
+- Track record of introducing new products.
+- Document patents, R&D activities, and intellectual capital.
+- Evaluate marketing effectiveness and service infrastructure.
+- Detail recruitment sources (colleges, universities, regions).
+- Analyze employee educational backgrounds.
+- Report on employee satisfaction and retention rates.
+- Document any union-related issues.
+
+## 13. Acquisition History
+Present a table showing acquired companies, acquisition prices, and years of completion. Do a deep dive into the success and failure of these acquisitions — did they create value?
+
+## 14. Future Initiatives
+Document planned strategic moves and growth initiatives.
+
+## 15. Regulatory Environment
+Identify specific regulations with potential favorable or unfavorable impacts.
+
+## 16. Capital Allocation
+- Analyze stock buyback policy, dividend strategy, leverage approach, and debt structure.
+- Did the buybacks come at the right time? Was debt raised at a good time?
+
+## 17. Key Investors and Founders
+- Identify major shareholders.
+- Provide background information on company founders.
+
+## 18. Management Assessment
+- Detail compensation packages for top executives.
+- Document any known corporate governance issues or fraud concerns.
+
+## 19. Financial Performance
+Present 5-year historical data in tabular format covering:
+- Income statement
+- Cash flow statement
+- Balance sheet
+- Debt profile
+- Stock options
+Highlight any specific accounting rules/assumptions critical to understanding the business.
+
+## 20. Hidden Liabilities
+- Identify off-balance-sheet items.
+- Document pension liabilities.
+- Detail lease commitments.
+- List corporate guarantees.
+
+## 21. Financial Ratios
+Present 5-year historical data in tabular format for:
+- Return on Capital (ROIC)
+- Return on Equity (ROE)
+- Leverage ratios
+- Gross Margin
+- Net Margin
+- Revenue Turnover
+
+## 22. Operational Metrics
+Document key performance indicators such as:
+- Volume
+- Average Revenue Per User (ARPU)
+- Gross margin
+- Capacity utilization
+- Pricing growth
+- Volume growth
+- Employee turnover
+- Same-store sales growth
+- Percentage of revenue from services/consumables
+- Recurring revenue metrics
+- Net revenue retention
+
+## 23. Risk Factors
+Identify specific weaknesses or risks related to:
+- Regulatory concerns
+- Legal issues
+- Product liability
+- Health hazards
+- Environmental hazards
+
+## 24. Basic DCF Valuation
+- Develop estimates of WACC, ROIC, growth, etc.
+- Calculate Enterprise Value, Market Value of Debt, Equity Value.
+- Provide detailed justifications of the assumptions.
+- Compare to current share price ({price}) for upside/downside. Use the price provided here — do not generate a random price target based on other analysts' thinking. We want a DCF-driven price target.
+- Show key sensitivities (WACC, terminal growth, revenue growth) in a sensitivity table.
+
+Output the entire memorandum in Markdown. Use tables liberally where data is structured. Keep prose tight and factual. If data for a particular sub-bullet is not publicly available or you are uncertain, say so explicitly rather than fabricating numbers."""
+
+
+def build_background_prompt(ticker: str, financials: dict) -> str:
+    """Fill the background template with whatever financial context we have."""
+    return COMPANY_BACKGROUND_PROMPT_TEMPLATE.format(
+        ticker=ticker,
+        company_name=financials.get("company_name") or ticker,
+        price=_fmt(financials.get("price"), fmt="${:.2f}"),
+        market_cap_b=_fmt(financials.get("market_cap_b"), suffix="B", fmt="${:.1f}"),
+        pe=_fmt(financials.get("pe"), fmt="{:.1f}"),
+        fwd_pe=_fmt(financials.get("fwd_pe"), fmt="{:.1f}"),
+        revenue_b=_fmt(financials.get("revenue_b"), suffix="B", fmt="${:.1f}"),
+        fcf_b=_fmt(financials.get("fcf_b"), suffix="B", fmt="${:.1f}"),
+        rev_growth=_fmt(financials.get("rev_growth"), suffix="%", fmt="{:.1f}"),
+        eps_growth=_fmt(financials.get("eps_growth"), suffix="%", fmt="{:.1f}"),
+        gross_margin=_fmt(financials.get("gross_margin"), suffix="%", fmt="{:.1f}"),
+        roe=_fmt(financials.get("roe"), suffix="%", fmt="{:.1f}"),
+        beta=_fmt(financials.get("beta"), fmt="{:.2f}"),
+        analyst_rating=financials.get("analyst_rating") or "N/A",
+        analyst_score=_fmt(financials.get("analyst_score"), fmt="{:.2f}"),
+        analyst_n=_fmt(financials.get("analyst_n"), fmt="{:.0f}"),
+    )
+
+
+with st.form("company_background_form"):
+    col_a, col_b = st.columns([3, 1])
+    with col_a:
+        background_ticker = st.text_input(
+            "Ticker",
+            placeholder="e.g. WTC.AX, HPE, AAPL",
+            help="Type a ticker to generate a 25-page information memorandum.",
+            key="background_ticker_input",
+        )
+    with col_b:
+        background_model = st.selectbox(
+            "Model",
+            ["claude-sonnet-4-6", "claude-opus-4-6"],
+            index=0,
+            help="Opus produces deeper analysis but takes longer and costs more.",
+            key="background_model_select",
+        )
+    run_background = st.form_submit_button("Generate memorandum", use_container_width=True)
+
+if run_background and background_ticker:
+    bticker_clean = background_ticker.strip().upper()
+    if not _ANTHROPIC_AVAILABLE:
+        st.error(
+            "The `anthropic` package isn't installed. Add `anthropic>=0.40.0` to "
+            "your `requirements.txt` and redeploy."
+        )
+    else:
+        b_financials = extract_financials_for_prompt(bticker_clean, df)
+        b_prompt = build_background_prompt(bticker_clean, b_financials)
+        with st.expander("Prompt sent to Claude", expanded=False):
+            st.code(b_prompt, language="markdown")
+        try:
+            with st.spinner(
+                f"Generating 25-page memorandum for {bticker_clean} ({background_model}) — this can take 1–3 minutes…"
+            ):
+                # Much higher max_tokens for the long memo.
+                background_text = run_company_analysis(
+                    bticker_clean, b_prompt, model=background_model, max_tokens=16000
+                )
+            st.markdown(background_text)
+
+            # Download button so the user can save the full memo.
+            st.download_button(
+                "Download memorandum (.md)",
+                data=background_text,
+                file_name=f"{bticker_clean}_background_memo.md",
+                mime="text/markdown",
+            )
+
+            b_price_now = b_financials.get("price")
+            if b_price_now is not None:
+                st.info(
+                    f"Live reference price for **{bticker_clean}** at run time: **${b_price_now:.2f}** "
+                    "(this is what the model was given for the Section 24 DCF comparison)."
+                )
+        except Exception as exc:
+            st.error(f"Memorandum generation failed: {exc}")
 
 
 # ── Footer ─────────────────────────────────────────────────────────────────────
