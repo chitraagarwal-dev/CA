@@ -133,9 +133,145 @@ TOP_FORTUNE500 = {
     "SPG":   ("Simon Property Group",       "Real Estate",              45),
 }
 
+# ── S&P 500 (top ~120 by market cap, mapped to GICS sectors) ───────────────────
+# Third tuple field is approximate index-weight rank, not Fortune 500 rank.
+SP500_LARGE_CAPS = {
+    # Technology — Software & Services
+    "MSFT":  ("Microsoft",                   "Software",                  1),
+    "GOOGL": ("Alphabet (Class A)",          "Internet / Advertising",    4),
+    "GOOG":  ("Alphabet (Class C)",          "Internet / Advertising",    5),
+    "META":  ("Meta Platforms",              "Internet / Advertising",    7),
+    "ORCL":  ("Oracle",                      "Software",                 18),
+    "CRM":   ("Salesforce",                  "Software",                 32),
+    "ADBE":  ("Adobe",                       "Software",                 36),
+    "NOW":   ("ServiceNow",                  "Software",                 41),
+    "INTU":  ("Intuit",                      "Software",                 47),
+    "IBM":   ("IBM",                         "IT Services",              52),
+    "PANW":  ("Palo Alto Networks",          "Cybersecurity",            58),
+    "FTNT":  ("Fortinet",                    "Cybersecurity",            93),
+    "SNPS":  ("Synopsys",                    "EDA Software",             82),
+    "CDNS":  ("Cadence Design Systems",      "EDA Software",             80),
+    "ADSK":  ("Autodesk",                    "Design Software",          95),
+    "WDAY":  ("Workday",                     "Software",                 91),
+    "ACN":   ("Accenture",                   "IT Services",              35),
+
+    # Technology — Hardware & Semiconductors
+    "AAPL":  ("Apple",                       "Hardware",                  2),
+    "NVDA":  ("NVIDIA",                      "Semiconductors",            3),
+    "AVGO":  ("Broadcom",                    "Semiconductors",            8),
+    "AMD":   ("Advanced Micro Devices",      "Semiconductors",           22),
+    "QCOM":  ("Qualcomm",                    "Semiconductors",           38),
+    "TXN":   ("Texas Instruments",           "Semiconductors",           48),
+    "AMAT":  ("Applied Materials",           "Semi Equipment",           42),
+    "LRCX":  ("Lam Research",                "Semi Equipment",           65),
+    "KLAC":  ("KLA Corporation",             "Semi Equipment",           67),
+    "MU":    ("Micron Technology",           "Memory Chips",             55),
+    "INTC":  ("Intel",                       "Semiconductors",           54),
+    "CSCO":  ("Cisco Systems",               "Networking",               43),
+    "DELL":  ("Dell Technologies",           "Hardware",                 96),
+    "HPQ":   ("HP Inc",                      "Hardware",                108),
+    "HPE":   ("Hewlett Packard Enterprise",  "Hardware",                115),
+
+    # Communication Services
+    "NFLX":  ("Netflix",                     "Streaming Media",          25),
+    "DIS":   ("Walt Disney",                 "Media / Entertainment",    53),
+    "CMCSA": ("Comcast",                     "Media / Telecom",          50),
+    "T":     ("AT&T",                        "Telecom",                  60),
+    "VZ":    ("Verizon",                     "Telecom",                  56),
+    "TMUS":  ("T-Mobile US",                 "Telecom",                  31),
+    "CHTR":  ("Charter Communications",      "Telecom",                 110),
+
+    # Consumer Discretionary
+    "AMZN":  ("Amazon",                      "E-Commerce / Cloud",        6),
+    "TSLA":  ("Tesla",                       "EV / Automotive",          12),
+    "HD":    ("Home Depot",                  "Home Improvement",         26),
+    "MCD":   ("McDonald's",                  "Restaurants",              45),
+    "NKE":   ("Nike",                        "Apparel",                  77),
+    "SBUX":  ("Starbucks",                   "Restaurants",              71),
+    "LOW":   ("Lowe's",                      "Home Improvement",         57),
+    "BKNG":  ("Booking Holdings",            "Travel",                   46),
+    "TJX":   ("TJX Companies",               "Off-Price Retail",         59),
+    "ABNB":  ("Airbnb",                      "Travel",                  100),
+
+    # Consumer Staples
+    "WMT":   ("Walmart",                     "Retail",                   13),
+    "PG":    ("Procter & Gamble",            "Consumer Staples",         15),
+    "COST":  ("Costco",                      "Retail",                   17),
+    "KO":    ("Coca-Cola",                   "Beverages",                21),
+    "PEP":   ("PepsiCo",                     "Beverages",                28),
+    "PM":    ("Philip Morris",               "Tobacco",                  39),
+    "MO":    ("Altria Group",                "Tobacco",                  78),
+    "MDLZ":  ("Mondelez",                    "Packaged Foods",           69),
+    "CL":    ("Colgate-Palmolive",           "Consumer Staples",         85),
+
+    # Financials
+    "BRK-B": ("Berkshire Hathaway (B)",      "Conglomerate",              9),
+    "JPM":   ("JPMorgan Chase",              "Banks",                    11),
+    "V":     ("Visa",                        "Payments",                 14),
+    "MA":    ("Mastercard",                  "Payments",                 19),
+    "BAC":   ("Bank of America",             "Banks",                    27),
+    "WFC":   ("Wells Fargo",                 "Banks",                    33),
+    "GS":    ("Goldman Sachs",               "Investment Banking",       40),
+    "MS":    ("Morgan Stanley",              "Investment Banking",       49),
+    "AXP":   ("American Express",            "Payments",                 51),
+    "BLK":   ("BlackRock",                   "Asset Management",         44),
+    "SCHW":  ("Charles Schwab",              "Brokerage",                68),
+    "C":     ("Citigroup",                   "Banks",                    63),
+    "PYPL":  ("PayPal",                      "Payments",                113),
+
+    # Healthcare
+    "LLY":   ("Eli Lilly",                   "Pharmaceuticals",          10),
+    "UNH":   ("UnitedHealth",                "Health Insurance",         16),
+    "JNJ":   ("Johnson & Johnson",           "Pharmaceuticals",          20),
+    "ABBV":  ("AbbVie",                      "Pharmaceuticals",          23),
+    "MRK":   ("Merck",                       "Pharmaceuticals",          29),
+    "TMO":   ("Thermo Fisher Scientific",    "Life Sciences Tools",      30),
+    "ABT":   ("Abbott Laboratories",         "Medical Devices",          34),
+    "PFE":   ("Pfizer",                      "Pharmaceuticals",          61),
+    "DHR":   ("Danaher",                     "Life Sciences Tools",      37),
+    "AMGN":  ("Amgen",                       "Biotech",                  64),
+    "GILD":  ("Gilead Sciences",             "Biotech",                  86),
+    "BMY":   ("Bristol-Myers Squibb",        "Pharmaceuticals",          88),
+    "ISRG":  ("Intuitive Surgical",          "Medical Devices",          62),
+    "ELV":   ("Elevance Health",             "Health Insurance",         70),
+    "CVS":   ("CVS Health",                  "Pharmacy / Insurance",     79),
+
+    # Industrials
+    "GE":    ("GE Aerospace",                "Aerospace",                72),
+    "CAT":   ("Caterpillar",                 "Machinery",                66),
+    "BA":    ("Boeing",                      "Aerospace",                98),
+    "HON":   ("Honeywell",                   "Industrial Conglomerate",  73),
+    "UNP":   ("Union Pacific",               "Railroads",                75),
+    "RTX":   ("RTX Corporation",             "Aerospace & Defense",      74),
+    "LMT":   ("Lockheed Martin",             "Defense",                  84),
+    "DE":    ("Deere & Company",             "Machinery",                81),
+    "UPS":   ("United Parcel Service",       "Logistics",                89),
+
+    # Energy
+    "XOM":   ("ExxonMobil",                  "Integrated Oil",           24),
+    "CVX":   ("Chevron",                     "Integrated Oil",           37),
+    "COP":   ("ConocoPhillips",              "Oil & Gas E&P",            76),
+    "SLB":   ("Schlumberger",                "Oilfield Services",       105),
+
+    # Utilities
+    "NEE":   ("NextEra Energy",              "Electric Utilities",       83),
+    "DUK":   ("Duke Energy",                 "Electric Utilities",       99),
+    "SO":    ("Southern Company",            "Electric Utilities",      102),
+
+    # Materials
+    "LIN":   ("Linde",                       "Industrial Gases",         60),
+    "SHW":   ("Sherwin-Williams",            "Paints / Coatings",        92),
+
+    # Real Estate
+    "PLD":   ("Prologis",                    "Industrial REIT",          87),
+    "AMT":   ("American Tower",              "Cell Tower REIT",          90),
+    "EQIX":  ("Equinix",                     "Data Center REIT",         94),
+}
+
 UNIVERSES = {
     "Fortune 500 Tech Companies": FORTUNE500_TECH,
     "Top Fortune 500 Companies": TOP_FORTUNE500,
+    "S&P 500 (Top ~120 by Mkt Cap)": SP500_LARGE_CAPS,
 }
 
 DEFAULT_TICKERS = list(FORTUNE500_TECH.keys())
@@ -197,7 +333,13 @@ with st.sidebar:
 
 # ── Data loading ───────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False, ttl=3600)
-def load_financials(tickers: list[str]) -> pd.DataFrame:
+def load_financials(tickers: list[str], universe_name: str = "Fortune 500 Tech Companies") -> pd.DataFrame:
+    """Pulls live yfinance data for each ticker and shapes it for the dashboard.
+
+    `universe_name` selects which metadata dictionary to look up subsector / rank from;
+    it's included in the cache key so switching universes invalidates correctly.
+    """
+    meta_dict = UNIVERSES.get(universe_name, FORTUNE500_TECH)
     rows = []
     progress = st.progress(0, text="Fetching financial data…")
     for i, ticker in enumerate(tickers):
@@ -210,7 +352,7 @@ def load_financials(tickers: list[str]) -> pd.DataFrame:
             ebitda = info.get("ebitda")
             ev     = info.get("enterpriseValue")
 
-            meta = FORTUNE500_TECH.get(ticker, (ticker, "Other", None))
+            meta = meta_dict.get(ticker, (ticker, "Other", None))
 
             shares = info.get("sharesOutstanding")
 
@@ -265,12 +407,26 @@ def load_financials(tickers: list[str]) -> pd.DataFrame:
         except Exception as exc:
             rows.append({
                 "Ticker": ticker,
-                "Company": FORTUNE500_TECH.get(ticker, (ticker,))[0],
-                "Subsector": FORTUNE500_TECH.get(ticker, ("", "Other"))[1],
-                "F500 Rank": FORTUNE500_TECH.get(ticker, ("", "", None))[2],
+                "Company": meta_dict.get(ticker, (ticker, "Other", None))[0],
+                "Subsector": meta_dict.get(ticker, ("", "Other", None))[1],
+                "F500 Rank": meta_dict.get(ticker, ("", "", None))[2],
             })
     progress.empty()
-    return pd.DataFrame(rows)
+    out = pd.DataFrame(rows)
+
+    # Guarantee the full schema even if every yfinance call failed (rate limit, network, etc.).
+    expected_cols = [
+        "Ticker", "Company", "Subsector", "F500 Rank", "Price", "Market Cap ($B)",
+        "P/E", "Fwd P/E", "P/B", "ROE (%)", "P/B ÷ ROE", "PEG", "EV/EBITDA",
+        "FCF Yield (%)", "Free Cash Flow ($B)", "Shares Outstanding",
+        "Rev Growth (%)", "EPS Growth (%)", "Gross Margin (%)",
+        "Div Yield (%)", "Beta", "52W High", "52W Low", "Revenue ($B)",
+        "Analyst Rating", "Analyst Score", "Analyst Count",
+    ]
+    for col in expected_cols:
+        if col not in out.columns:
+            out[col] = np.nan
+    return out
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
@@ -296,16 +452,19 @@ def compute_score(df: pd.DataFrame, weights: dict) -> pd.DataFrame:
         # Rank percentile within each subsector — lower value is better for most metrics (ascending=True → low is undervalued)
         return s.groupby(df['Subsector']).rank(ascending=ascending, pct=True)
 
+    def _has(col):
+        return col in df.columns and df[col].notna().any()
+
     components = {}
-    if weights["pe"] and df["P/E"].notna().any():
+    if weights["pe"] and _has("P/E"):
         components["pe"] = norm_rank(df["P/E"], ascending=True) * weights["pe"]
-    if weights["pb"] and df["P/B"].notna().any():
+    if weights["pb"] and _has("P/B"):
         components["pb"] = norm_rank(df["P/B"], ascending=True) * weights["pb"]
-    if weights["peg"] and df["PEG"].notna().any():
+    if weights["peg"] and _has("PEG"):
         components["peg"] = norm_rank(df["PEG"], ascending=True) * weights["peg"]
-    if weights["ev"] and df["EV/EBITDA"].notna().any():
+    if weights["ev"] and _has("EV/EBITDA"):
         components["ev"] = norm_rank(df["EV/EBITDA"], ascending=True) * weights["ev"]
-    if weights["fcf"] and df["FCF Yield (%)"].notna().any():
+    if weights["fcf"] and _has("FCF Yield (%)"):
         components["fcf"] = norm_rank(df["FCF Yield (%)"], ascending=False) * weights["fcf"]  # higher FCF yield = better
 
     total_w = sum(v for k, v in weights.items() if k in components)
@@ -341,7 +500,7 @@ def calculate_dcf(fcf: Optional[float], shares: Optional[float], growth_rate_pct
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
-st.title("Fortune 500: Undervalued Company Dashboard")
+st.title(f"{universe_name}: Undervalued Company Dashboard")
 st.caption(
     "Scores each company using a weighted composite of P/E, P/B, PEG, EV/EBITDA, and FCF Yield. "
     "Lower score = relatively more undervalued vs. peers. Data via Yahoo Finance · refreshes hourly."
@@ -351,8 +510,18 @@ if not selected_tickers:
     st.error("No tickers selected.")
     st.stop()
 
-with st.spinner("Loading financial data for Fortune 500 tech companies…"):
-    df_raw = load_financials(tuple(selected_tickers))
+with st.spinner(f"Loading financial data for {universe_name}…"):
+    df_raw = load_financials(tuple(selected_tickers), universe_name=universe_name)
+
+# If Yahoo Finance returned nothing usable for any ticker (rate-limited, network failure, etc.),
+# warn loudly but still let the page render the structural columns so the app doesn't crash.
+if "P/E" in df_raw.columns and df_raw["P/E"].notna().sum() == 0 and df_raw["Price"].notna().sum() == 0:
+    st.error(
+        "Yahoo Finance returned no usable data for any selected ticker. "
+        "This is almost always a Yahoo rate-limit or network failure on the Streamlit Cloud IP. "
+        "Try clicking '🔄 Refresh data' in the sidebar in a minute, or reboot the app. "
+        "The Company Analysis / Company Background sections below will still work because they call yfinance per-ticker on demand."
+    )
 
 weights = {"pe": w_pe, "pb": w_pb, "peg": w_peg, "ev": w_ev, "fcf": w_fcf}
 df = compute_score(df_raw, weights)
